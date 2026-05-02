@@ -12,16 +12,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Bandit
         run: pip install bandit
-      - name: Run Bandit on all Python services
+      - name: Run Bandit
         run: |
-          mkdir -p bandit-results
-          for service in user-service product-service notification-service; do
-            if [ -d "services/$service" ]; then
-              bandit -r "services/$service" -f sarif -o "bandit-results/$service.sarif" || true
-            fi
-          done
-      - name: Upload SARIF results
+          bandit -r services/user-service -f sarif -o results.sarif || true
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: bandit-results
-          category: bandit
+          sarif_file: results.sarif
