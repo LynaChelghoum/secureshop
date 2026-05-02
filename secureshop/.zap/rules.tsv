@@ -1,0 +1,15 @@
+# ZAP rule configuration
+# Format: rule_id	IGNORE|WARN|FAIL	description
+10015	WARN	Incomplete or No Cache-control Header Set
+10016	WARN	Web Browser XSS Protection Not Enabled
+10017	WARN	Cross-Domain JavaScript Source File Inclusion
+10019	WARN	Content-Type Header Missing
+10020	WARN	Anti-clickjacking Header
+10021	WARN	X-Content-Type-Options Header Missing
+10023	WARN	Information Disclosure - Debug Error Messages
+10036	FAIL	HTTP Server Response Header
+10038	FAIL	Content Security Policy (CSP) Header Not Set
+10040	FAIL	Secure Pages Include Mixed Content
+10045	FAIL	Source Code Disclosure - /WEB-INF folder
+10096	FAIL	Timestamp Disclosure - Unix
+10105	FAIL	Weak Authentication Method

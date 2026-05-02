@@ -1,0 +1,65 @@
+name: Container Image Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-scan:
+    name: Build & Scan (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: user-service
+            path: services/user-service
+          - service: product-service
+            path: services/product-service
+          - service: order-service
+            path: services/order-service
+          - service: payment-service
+            path: services/payment-service
+          - service: notification-service
+            path: services/notification-service
+          - service: inventory-service
+            path: services/inventory-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t secureshop/${{ matrix.service }}:${{ github.sha }} \
+            ${{ matrix.path }}
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: secureshop/${{ matrix.service }}:${{ github.sha }}
+          format: sarif
+          output: trivy-image-${{ matrix.service }}.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-${{ matrix.service }}.sarif
+          category: trivy-image-${{ matrix.service }}
+
+      - name: Grype image scan
+        uses: anchore/scan-action@v3
+        with:
+          image: secureshop/${{ matrix.service }}:${{ github.sha }}
+          fail-build: false
+          severity-cutoff: high
+          output-format: sarif
+
+      - name: Upload Grype SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: grype-${{ matrix.service }}

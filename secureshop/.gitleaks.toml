@@ -1,0 +1,24 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "jwt-secret"
+description = "JWT Secret Key"
+regex = '''(?i)(jwt[_-]?secret|jwt[_-]?key)\s*[=:]\s*['"]?[a-zA-Z0-9+/]{8,}'''
+tags = ["secret", "jwt"]
+
+[[rules]]
+id = "smtp-password"
+description = "SMTP Password"
+regex = '''(?i)(smtp[_-]?pass(word)?)\s*[=:]\s*['"]?.{6,}'''
+tags = ["secret", "smtp"]
+
+[allowlist]
+paths = [
+  ".env.example",
+  ".gitleaks.toml"
+]
+regexes = [
+  "change_me",
+  "fallback-secret"
+]

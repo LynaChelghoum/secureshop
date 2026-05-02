@@ -1,0 +1,145 @@
+name: Full DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Stage 1: Secrets Detection (fail fast) ─────────────────────────────
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Stage 2: SAST ──────────────────────────────────────────────────────
+  sast-python:
+    name: SAST — Bandit
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install bandit[sarif]
+      - run: |
+          bandit -r services/user-service services/product-service services/notification-service \
+            -f sarif -o bandit.sarif --severity-level medium || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+
+  sast-nodejs:
+    name: SAST — Semgrep
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          semgrep --config=p/nodejs --config=p/owasp-top-ten \
+            services/order-service services/payment-service services/inventory-service \
+            --sarif --output semgrep.sarif || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  # ── Stage 3: SCA ───────────────────────────────────────────────────────
+  sca:
+    name: SCA — Trivy filesystem
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-sca
+
+  # ── Stage 4: Container Scanning ────────────────────────────────────────
+  container-scan:
+    name: Container Scan
+    needs: [sast-python, sast-nodejs, sca]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build all images
+        run: docker compose build
+      - name: Scan user-service image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: secureshop-user-service:latest
+          format: sarif
+          output: trivy-container.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-container.sarif
+          category: trivy-container
+
+  # ── Stage 5: DAST (only on main push) ─────────────────────────────────
+  dast:
+    name: DAST — OWASP ZAP
+    needs: container-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        run: |
+          cp .env.example .env
+          docker compose up -d
+          sleep 30
+      - name: ZAP scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost'
+          fail_action: false
+      - name: Upload ZAP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-report
+          path: report_html.html
+      - name: Teardown
+        if: always()
+        run: docker compose down
+
+  # ── Stage 6: Summary ───────────────────────────────────────────────────
+  pipeline-summary:
+    name: Pipeline Summary
+    needs: [sast-python, sast-nodejs, sca, container-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report status
+        run: |
+          echo "## DevSecOps Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets scan | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST Python  | ${{ needs.sast-python.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST Node.js | ${{ needs.sast-nodejs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SCA          | ${{ needs.sca.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container    | ${{ needs.container-scan.result }} |" >> $GITHUB_STEP_SUMMARY

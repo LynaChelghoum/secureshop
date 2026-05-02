@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: ./gateway
+    ports:
+      - "80:80"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - payment-service
+      - notification-service
+      - inventory-service
+    networks:
+      - secureshop-net
+
+  user-service:
+    build: ./services/user-service
+    ports:
+      - "8001:8001"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_URL=${USER_DB_URL}
+    networks:
+      - secureshop-net
+
+  product-service:
+    build: ./services/product-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DB_URL=${PRODUCT_DB_URL}
+    networks:
+      - secureshop-net
+
+  order-service:
+    build: ./services/order-service
+    ports:
+      - "8003:8003"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+    depends_on:
+      - rabbitmq
+    networks:
+      - secureshop-net
+
+  payment-service:
+    build: ./services/payment-service
+    ports:
+      - "8004:8004"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - STRIPE_KEY=${STRIPE_KEY}
+    networks:
+      - secureshop-net
+
+  notification-service:
+    build: ./services/notification-service
+    ports:
+      - "8005:8005"
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+    depends_on:
+      - rabbitmq
+    networks:
+      - secureshop-net
+
+  inventory-service:
+    build: ./services/inventory-service
+    ports:
+      - "8006:8006"
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+    networks:
+      - secureshop-net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
+    networks:
+      - secureshop-net
+
+networks:
+  secureshop-net:
+    driver: bridge

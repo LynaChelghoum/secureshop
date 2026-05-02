@@ -1,0 +1,62 @@
+name: SCA (Dependency Scanning)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  trivy-sca:
+    name: Trivy SCA
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - services/user-service
+          - services/product-service
+          - services/notification-service
+          - services/order-service
+          - services/payment-service
+          - services/inventory-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ${{ matrix.service }}
+          format: sarif
+          output: trivy-${{ strategy.job-index }}.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 0
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ strategy.job-index }}.sarif
+          category: trivy-sca-${{ matrix.service }}
+
+  owasp-dependency-check:
+    name: OWASP Dependency-Check (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: SecureShop
+          path: .
+          format: SARIF
+          out: dependency-check-report.sarif
+          args: >
+            --enableExperimental
+            --failOnCVSS 8
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: dependency-check-report.sarif
+          category: owasp-dependency-check
