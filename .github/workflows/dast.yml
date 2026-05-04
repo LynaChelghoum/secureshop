@@ -19,26 +19,22 @@ jobs:
             sleep 3
           done
 
-      - name: Get Gateway container IP
+      - name: Get Gateway container ID
+        id: get-id
         run: |
-          GATEWAY_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(docker ps -q --filter "name=gateway"))
-          echo "GATEWAY_IP=$GATEWAY_IP" >> $GITHUB_ENV
-          echo "Gateway IP: $GATEWAY_IP"
+          GATEWAY_ID=$(docker ps -q --filter "name=gateway")
+          echo "GATEWAY_ID=$GATEWAY_ID" >> $GITHUB_ENV
+          echo "Gateway container ID: $GATEWAY_ID"
 
-      - name: Test connectivity from ZAP container
+      - name: Run ZAP Baseline Scan (same network as gateway)
         run: |
-          docker run --rm curlimages/curl curl -s http://${GATEWAY_IP}/api/users/health || echo "FAILED to connect"
-
-      - name: Run ZAP Baseline Scan
-        env:
-          GATEWAY_IP: ${{ env.GATEWAY_IP }}
-        run: |
-          docker run --rm -v $(pwd):/zap/wrk \
+          docker run --rm \
+            --network container:${{ env.GATEWAY_ID }} \
+            -v $(pwd):/zap/wrk \
             -t zaproxy/zap-stable \
-            zap-baseline.py -t http://${GATEWAY_IP} -r baseline_report.html \
-            || echo "ZAP scan failed but continuing"
+            zap-baseline.py -t http://localhost -r baseline_report.html
 
-      - name: Upload Report (if exists)
+      - name: Upload Report
         uses: actions/upload-artifact@v4
         if: always()
         with:
