@@ -1,23 +1,17 @@
 name: DAST Scan with ZAP
 
 on:
-  # Permet de lancer le workflow manuellement depuis l'interface GitHub
   workflow_dispatch:
 
 jobs:
   zap-scan:
     runs-on: ubuntu-latest
     steps:
-      # 1. On récupère le code de ton dépôt
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2. On lance ton application avec Docker Compose
-      #    (les services tournent en arrière-plan)
       - name: Start application stack
         run: docker compose up -d --build
 
-      # 3. On attend que ton API Gateway soit prête à répondre
       - name: Wait for API Gateway to be ready
         run: |
           until curl -s http://localhost/api/users/health; do
@@ -25,8 +19,6 @@ jobs:
             sleep 3
           done
 
-      # 4. L'ASTUCE : On récupère l'adresse IP du conteneur de ta Gateway.
-      #    C'est le secret pour résoudre le problème de réseau.
       - name: Get Gateway Container IP
         id: get-ip
         run: |
@@ -34,17 +26,10 @@ jobs:
           echo "GATEWAY_IP=$GATEWAY_IP" >> $GITHUB_ENV
           echo "Gateway IP is: $GATEWAY_IP"
 
-      # 5. On exécute ZAP en utilisant l'IP récupérée.
-      #    IMPORTANT : Ceci est une version de test passive (baseline).
-      #    Elle est rapide et idéale pour vérifier que la connectivité fonctionne.
       - name: Run OWASP ZAP Baseline Scan
         run: |
-          docker run --rm \
-            -v $(pwd):/zap/wrk \
-            -t zaproxy/zap-stable \
-            zap-baseline.py -t http://${{ env.GATEWAY_IP }} -r baseline_report.html
+          docker run --rm -v $(pwd):/zap/wrk -t zaproxy/zap-stable zap-baseline.py -t http://${{ env.GATEWAY_IP }} -r baseline_report.html
 
-      # 6. On télécharge le rapport en tant qu'artéfact pour pouvoir le consulter.
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         if: always()
