@@ -1,10 +1,10 @@
-name: DAST Scan with ZAP
+name: DAST Scan with Nikto
 
 on:
   workflow_dispatch:
 
 jobs:
-  zap-scan:
+  nikto-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,24 +19,16 @@ jobs:
             sleep 3
           done
 
-      - name: Get Gateway container ID
-        id: get-id
+      - name: Run Nikto scan
         run: |
-          GATEWAY_ID=$(docker ps -q --filter "name=gateway")
-          echo "GATEWAY_ID=$GATEWAY_ID" >> $GITHUB_ENV
-          echo "Gateway container ID: $GATEWAY_ID"
+          docker run --rm -v $(pwd):/tmp \
+            --network container:$(docker ps -q --filter "name=gateway") \
+            -t sullo/nikto \
+            nikto -h http://localhost -o /tmp/nikto_report.html
 
-      - name: Run ZAP Baseline Scan (same network as gateway)
-        run: |
-          docker run --rm \
-            --network container:${{ env.GATEWAY_ID }} \
-            -v $(pwd):/zap/wrk \
-            -t zaproxy/zap-stable \
-            zap-baseline.py -t http://localhost -r baseline_report.html
-
-      - name: Upload Report
+      - name: Upload Nikto report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: zap-report
-          path: baseline_report.html
+          name: nikto-report
+          path: nikto_report.html
